@@ -1,9 +1,11 @@
 ---
 title: "BootLoader"
-subtitle: "Who Wants a Bike?"
 author: "Miles D. Williams"
-date: "3/29/2020"
-output: html_document
+date: "3/30/2020"
+output:
+  html_document: default
+  pdf_document: default
+subtitle: Who Wants to Help Dennis Build a Bike?
 ---
 
 ```{r setup, include=FALSE}
@@ -16,18 +18,21 @@ options(digits=3)
 ```
 
 
-First I open the `tidyverse` because that's how I roll...
+First I open the packages I need to use for data manipulation and visualization.
 
 ```{r}
-library(tidyverse)
+library(tidyverse) 
+library(ggpubr) 
 ```
 
-Now I get the data and given it a nice short name (`dt`)
+Now I get the data and give it a nice short name (`dt`)
 
 ```{r}
 dt = read_csv('dataviz-01.csv')
-dt
+dt # look at the data
 ```
+
+First I want to do some basic exploratory analysis...
 
 How many unique people are in the data?
 
@@ -42,16 +47,14 @@ dt %>%
   scale_y_continuous(breaks=0:25)
 ```
 
-So it looks like a bunch of people are regulars. That'll be important to note for later.
-
-We want to see which people are most likely to contribute money toward Dennis' 3-speed bike concept. What categories of projects to people contribute funds toward?
+What categories of projects do people contribute funds toward? 
 
 ```{r}
 dt %>%
   count(category)
 ```
 
-It looks like we have 5 categories: environment, fashion, games, sports, and tech. 
+It looks like we have 5 categories: environment, fashion, games, sports, and tech. And each of the categories seems to get plenty of love. 
 
 Now, it might also be useful to look at the people that either only viewed a project vs. those who funded.
 
@@ -60,7 +63,7 @@ dt %>%
   count(category, eventType)
 ```
 
-A slight minority of people actually fund projects. 
+So just over half the people who view projects don't fund them.
 
 When they do donate, how much do they contribute? Below I look at the distribution of payments by category.
 
@@ -73,101 +76,232 @@ dt %>%
   facet_wrap(~category)
 ```
 
+Now for the Big Show. Let's take a look at who is most likely to contribute to Dennis' bike project. I do this by grouping the data by category, gender, age, marital status, type of device used (iOS or Android), and location (city, state).
 
-So, I think Dennis would obviously benefit most if the people who receive a push are those who are 
-
-1. most likely to fund projects;
-
-2. likely to given more than less money when they do contribute;
-
-3. likely to contribute more than once;
-
-4. likely to contribute to categories relevant to Dennis' project.
-
-First, let's identify those who aren't so tight fisted. How many people don't contribute anything?
+I then compute some summary statistics of money donated to be computed by groups (mean, SD, min., max., N). I restrict the data to people who contribute funds. I then narrow the data down do people who contribute to environmental projects, sports projects, and and tech. projects. Why? Because I think these are the people who would be most interested in helping Dennis build his eco-friendly bike.
 
 ```{r}
 dt %>%
-  group_by(userid) %>%
-  count(is.na(amountDonated)) %>%
-  filter(n==0)
+  filter(
+    amountDonated>0
+  ) %>%
+  group_by(
+    category, gender, age, maritalStatus,
+    device, city, state
+  ) %>%
+  summarize(
+    total = sum(amountDonated),
+    mean = mean(amountDonated),
+    sd = sd(amountDonated),
+    min = min(amountDonated),
+    max = max(amountDonated),
+    n = n()
+  ) %>%
+  arrange(-total) %>%
+  filter(
+    category %in% c('sports','environment','technology')
+  ) -> top_funders
+top_funders
 ```
 
-So everybody contributes something.
+Now, that's a pretty big table. The below figure synthesizes the results, reporting the most relevant information for who is most likely to contribute funds to Dennis' project.
 
-Let's just do this as a predictive model:
-
-```{r}
-library(randomForest)
-```
-
-Make NAs 0s
 
 ```{r}
-dt$amountDonated[is.na(dt$amountDonated)]=0
-dt = dt %>%
-  mutate_if(
-    is.character,
-    as.factor
+extrafont::loadfonts(quiet=T,device='win') # for more fonts
+top_funders %>%
+  group_by(
+    category
+  ) %>%
+  summarize(
+    total = sum(total)
   ) %>%
   mutate(
-    zipCode = as.factor(zipCode)
+    highlight = ifelse(total==max(total), "yes", "no" )
+  ) %>%
+  ggplot() +
+  aes(reorder(category,total),total,
+      fill = highlight) +
+  geom_col(width = .5) +
+  labs(x='',y='Total $',
+       title = 'Category') +
+  scale_y_continuous(
+    labels=scales::comma_format()
+  ) +
+  scale_fill_manual(
+    values=c("yes"="tomato", "no"="gray"), 
+    guide = F
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    text = element_text(family = 'SimSun-ExtB'),
+    axis.ticks.y = element_blank(),
+    axis.text = element_text(color='black')
+  ) +
+  coord_flip() -> p1
+top_funders %>%
+  group_by(
+    gender
+  ) %>%
+  summarize(
+    total = sum(total)
+  ) %>%
+  mutate(
+    highlight = ifelse(total==max(total), "yes", "no" )
+  ) %>%
+  mutate(
+    gender = c('Female','Male','Unknown')
+  ) %>%
+  ggplot() +
+  aes(reorder(gender,total),total,fill=highlight) +
+  geom_col(width = .5) +
+  labs(x='',y='Total $',
+       title = 'Gender') +
+  scale_y_continuous(
+    labels=scales::comma_format()
+  ) +
+  scale_fill_manual(
+    values=c("yes"="tomato", "no"="gray"), 
+    guide = F
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    text = element_text(family = 'SimSun-ExtB'),
+    axis.ticks.y = element_blank(),
+    axis.text = element_text(color='black')
+  ) +
+  coord_flip() -> p2
+top_funders %>%
+  group_by(
+    age
+  ) %>%
+  summarize(
+    total = sum(total)
+  ) %>%
+   mutate(
+    highlight = ifelse(total==max(total), "yes", "no" )
+  ) %>%
+  ggplot() +
+  aes(reorder(age,total),total,fill=highlight) +
+  geom_col(width = .5) +
+  labs(x='',y='Total $',
+       title = 'Age') +
+  scale_y_continuous(
+    labels=scales::comma_format()
+  ) +
+  scale_fill_manual(
+    values=c("yes"="tomato", "no"="gray"), 
+    guide = F
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    text = element_text(family = 'SimSun-ExtB'),
+    axis.ticks.y = element_blank(),
+    axis.text = element_text(color='black')
+  ) +
+  coord_flip() -> p3
+top_funders %>%
+  group_by(
+    device
+  ) %>%
+  summarize(
+    total = sum(total)
+  ) %>%
+   mutate(
+    highlight = ifelse(total==max(total), "yes", "no" )
+  ) %>%
+  ggplot() +
+  aes(reorder(device,total),total,fill=highlight) +
+  geom_col(width = .5) +
+  labs(x='',y='Total $',
+       title = 'Device') +
+  scale_y_continuous(
+    labels=scales::comma_format()
+  ) +
+  scale_fill_manual(
+    values=c("yes"="tomato", "no"="gray"), 
+    guide = F
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    text = element_text(family = 'SimSun-ExtB'),
+    axis.ticks.y = element_blank(),
+    axis.text = element_text(color='black')
+  ) +
+  coord_flip() -> p4
+top_funders %>%
+  mutate(
+    location = paste(city,state,sep=', ')
+  ) %>%
+  group_by(
+    location
+  ) %>%
+  summarize(
+    total = sum(total)
+  ) %>%
+  arrange(-total) %>%
+  .[1:10,] %>%
+  mutate(
+    highlight = ifelse(total==max(total), "yes", "no" )
+  ) %>%
+  ggplot() +
+  aes(reorder(location,total),total,fill=highlight) +
+  geom_col(width = .5) +
+  labs(x='',y='Total $',
+       title = 'Top 10 Locations') +
+  scale_y_continuous(
+    labels=scales::comma_format()
+  ) +
+  scale_fill_manual(
+    values=c("yes"="tomato", "no"="gray"), 
+    guide = F
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    text = element_text(family = 'SimSun-ExtB'),
+    axis.ticks.y = element_blank(),
+    axis.text = element_text(color='black')
+  ) +
+  coord_flip() -> p5
+gridExtra::grid.arrange(
+  p1,p2,p3,p4,p5,
+  layout_matrix = rbind(
+    c(1,1,2,2),
+    c(5,5,3,3),
+    c(5,5,4,4)
   )
-# and let's log-transform money
-
-dt = dt %>%
-  mutate(lamount = log(amountDonated+1),
-         funded = as.factor(amountDonated>0))
+) -> full_plot
 ```
 
+That doesn't look too bad. However, I'd like to add a title, and save the output.
 
 ```{r}
-startTime = Sys.time()
-rf = randomForest(
-  amountDonated ~
-    eventType + category + 
-    gender + age + maritalStatus + 
-    device + state + city, 
-  dt
-)
-endTime = Sys.time()
-startTime - endTime # time to run: about 10 minutes.
-```
-
-```{r}
-trainObs = sample(
-  1:nrow(dt), replace = F, size = round(nrow(dt)*.7)
-)
-train_dt = dt[trainObs,] # 70% of obs.
-test_dt = dt[-trainObs,] # 30% of obs.
-```
-
-```{r}
-startTime = Sys.time()
-rf1 = randomForest(
-  funded ~
-    eventType + category + 
-    gender + age + maritalStatus + 
-    device + state, 
-  train_dt
-)
-endTime = Sys.time()
-endTime - startTime # time to train
-```
-
-```{r}
-preds = predict(rf1, newdata = test_dt)
-ggplot() +
-  aes(test_dt$funded,preds) +
-  geom_point() +
-  geom_smooth() +
-  geom_abline(intercept = 0, slope = 1) +
-  labs(
-    caption = paste0(
-      round(100*mean(preds==test_dt$funded),2),
-      '% of variation predicted'
-    )
+annotate_figure(
+  full_plot,
+  top = text_grob(
+    "Who will be interested in Dennis' bicycle project?",
+    family = "SimSun-ExtB",
+    size = 18
   )
+) -> full_plot
+ggsave(
+  plot = full_plot,
+  'plot1.png',
+  units = 'in',
+  height = 7,
+  width = 10
+)
+full_plot
 ```
 
-So now we have a REALLY GOOD predictive model. Now we just need to identify the people who are our likely funders...
+Done! So it looks like the best people to target are people women, age 18-24, who like donating to sports projects, who live in Atlanta, GA, and who use an iOS device.
