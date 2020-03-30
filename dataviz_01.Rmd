@@ -1,0 +1,173 @@
+---
+title: "BootLoader"
+subtitle: "Who Wants a Bike?"
+author: "Miles D. Williams"
+date: "3/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo=T,
+  message=F,
+  warning=F
+)
+options(digits=3)
+```
+
+
+First I open the `tidyverse` because that's how I roll...
+
+```{r}
+library(tidyverse)
+```
+
+Now I get the data and given it a nice short name (`dt`)
+
+```{r}
+dt = read_csv('dataviz-01.csv')
+dt
+```
+
+How many unique people are in the data?
+
+```{r}
+dt %>%
+  count(userid) %>%
+  arrange(-n) %>%
+  mutate(id=1:n()) %>%
+  ggplot() +
+  aes(id,n) +
+  geom_col() +
+  scale_y_continuous(breaks=0:25)
+```
+
+So it looks like a bunch of people are regulars. That'll be important to note for later.
+
+We want to see which people are most likely to contribute money toward Dennis' 3-speed bike concept. What categories of projects to people contribute funds toward?
+
+```{r}
+dt %>%
+  count(category)
+```
+
+It looks like we have 5 categories: environment, fashion, games, sports, and tech. 
+
+Now, it might also be useful to look at the people that either only viewed a project vs. those who funded.
+
+```{r}
+dt %>%
+  count(category, eventType)
+```
+
+A slight minority of people actually fund projects. 
+
+When they do donate, how much do they contribute? Below I look at the distribution of payments by category.
+
+```{r}
+dt %>%
+  filter(eventType == 'fundedProject') %>%
+  ggplot() +
+  aes(amountDonated) +
+  geom_histogram() +
+  facet_wrap(~category)
+```
+
+
+So, I think Dennis would obviously benefit most if the people who receive a push are those who are 
+
+1. most likely to fund projects;
+
+2. likely to given more than less money when they do contribute;
+
+3. likely to contribute more than once;
+
+4. likely to contribute to categories relevant to Dennis' project.
+
+First, let's identify those who aren't so tight fisted. How many people don't contribute anything?
+
+```{r}
+dt %>%
+  group_by(userid) %>%
+  count(is.na(amountDonated)) %>%
+  filter(n==0)
+```
+
+So everybody contributes something.
+
+Let's just do this as a predictive model:
+
+```{r}
+library(randomForest)
+```
+
+Make NAs 0s
+
+```{r}
+dt$amountDonated[is.na(dt$amountDonated)]=0
+dt = dt %>%
+  mutate_if(
+    is.character,
+    as.factor
+  ) %>%
+  mutate(
+    zipCode = as.factor(zipCode)
+  )
+# and let's log-transform money
+
+dt = dt %>%
+  mutate(lamount = log(amountDonated+1),
+         funded = as.factor(amountDonated>0))
+```
+
+
+```{r}
+startTime = Sys.time()
+rf = randomForest(
+  amountDonated ~
+    eventType + category + 
+    gender + age + maritalStatus + 
+    device + state + city, 
+  dt
+)
+endTime = Sys.time()
+startTime - endTime # time to run: about 10 minutes.
+```
+
+```{r}
+trainObs = sample(
+  1:nrow(dt), replace = F, size = round(nrow(dt)*.7)
+)
+train_dt = dt[trainObs,] # 70% of obs.
+test_dt = dt[-trainObs,] # 30% of obs.
+```
+
+```{r}
+startTime = Sys.time()
+rf1 = randomForest(
+  funded ~
+    eventType + category + 
+    gender + age + maritalStatus + 
+    device + state, 
+  train_dt
+)
+endTime = Sys.time()
+endTime - startTime # time to train
+```
+
+```{r}
+preds = predict(rf1, newdata = test_dt)
+ggplot() +
+  aes(test_dt$funded,preds) +
+  geom_point() +
+  geom_smooth() +
+  geom_abline(intercept = 0, slope = 1) +
+  labs(
+    caption = paste0(
+      round(100*mean(preds==test_dt$funded),2),
+      '% of variation predicted'
+    )
+  )
+```
+
+So now we have a REALLY GOOD predictive model. Now we just need to identify the people who are our likely funders...
