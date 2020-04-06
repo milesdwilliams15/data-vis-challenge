@@ -1,0 +1,155 @@
+---
+title: "What Drives Good Governance?"
+author: "Miles D. Williams"
+date: "4/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+
+What determines good governance? Here, I explore some correlates of good governance with the aid of an interactive correlation network.
+
+First, I need the requisite packages...
+
+```{r}
+library(tidyverse) # to work with data
+library(corrr)     # for tidy correlations
+library(networkD3) # for interactive visualizations
+```
+
+And now I need the data...
+
+```{r}
+dt = read_csv('dataviz-02.csv')
+dt
+```
+
+The above dataset contains a lot of variables, ranging from GDP per capita, population, Sustainable Economic Development Assessment, World Happiness Report Scores, Control of Corruption, and a host of other measures for 195 countries. 
+
+There's a lot to wrap our heads around here. One useful way to explore how so many variables are interrelated is with the aid of a correlation network (and an interactive one at that!).
+
+First, let's just look at the bivariate correlations in the data. We can do this with the `correlate()` function in the `corrr` package.
+
+```{r}
+cors = correlate(
+  dt %>%
+    # get rid of empty vectors and country ID info:
+    select(-country,-countryISO,-X5,-X11,-X23)
+) 
+cors # show output
+```
+
+We now have a tibble of correlations for 32 variables. While it's simple enough to look through these results to get a sense for how variables are correlated, it will take some time to fully digest these results as they stand.
+
+Alternatively, I can make a network plot that let's me more clearly see how measures of governance correlate with other features of a country, like income (GDP per capita), rule of law, healthcare spending, and so on.
+
+I can do this really easily with the `simpleNetwork()` function in the `networkD3` package.
+
+First, let's recreate the correlation matrix. But, before doing that, I want to clean up the names of the variables in the data...
+
+```{r}
+dt %>%
+  select(
+    -country,
+    -countryISO,
+    -X5,-X11,-X23
+  ) %>%
+  rename(
+    GINI=giniIndex,
+    'Happy Planet'=happyPlanetIndex,
+    'World Happiness'=worldHappinessReportScore,
+    'Human Dev.'=humanDevelopmentIndex,
+    'Sustainable Dev.'=sustainableEconomicDevelopmentAssessment,
+    Population=population,
+    GDP=gdp,
+    Income=gdpPerCapita,
+    'GDP Growth'=gdpGrowth,
+    'Health Spending per GDP'=healthExpenditureShareOfGDP,
+    'Per Capita Health Spending'=healthExpenditurePerPerson,
+    'Edu. Spending per GDP'=educationExpenditureShareOfGDP,
+    'Per Capita Edu. Spending'=educationExpenditurePerPerson,
+    'Years in School'=schoolLifeExpectancy,
+    'Unemployment Rate'=percentUnemployed,
+    'Govt. Spending Score'=governmentSpendingScore,
+    'Govt. Spending per GDP'=governmentExpenditureShareOfGDP,
+    'Lack of Political Rights'=politicalRightsScore,
+    'Low Civil Liberties'=civilLibertiesScore,
+    'Political Stability'=politicalStabilityScore,
+    'Govt. Effectiveness'=governmentEffectivenessScore,
+    'Regulatory Quality'=regulatoryQualityScore,
+    'Rule of Law'=ruleOfLawScore,
+    'Control of Corruption'=controlOfCorruptionScore,
+    'Judicial Effectiveness'=judicialEffectivenessScore,
+    'Govt. Integrity'=governmentIntegrityScore,
+    'Property Rights'=propertyRightsScore,
+    'Tax Burden'=taxBurdenScore,
+    'Econ. Freedom'=economicFreedomScore,
+    'Financial Freedom'=financialFreedomScore,
+    'Women MPs'=percentWomenMP
+  ) -> clean_dt
+```
+
+Next, I use `correlate()` on the data.
+
+```{r}
+clean_dt %>%
+  correlate() -> cors
+
+# make NAs zeros
+diag(cors[,-1]) = 0
+```
+
+I then use `stretch()` to reformat the data so that the first and second columns denote the pairwise names of variables, and where the third column denotes the correlation coefficient.
+
+```{r}
+cors %>%
+  stretch() -> stretch_cors
+stretch_cors # show output
+```
+
+Looking at the above, it's clear we have a lot of pairwise correlations (1,024 to be precise). To simplify things, it can be useful to zero in on the most strongly correlated variable pairs in the data. I do this by filtering out pairwise correlations where the absolute value of the correlation coefficient is less than $|\rho| = 0.7$.
+
+```{r}
+stretch_cors %>%
+  filter(abs(r)>=0.7) -> strong_cors
+strong_cors
+```
+
+That narrows things down to 192 variable pairs.
+
+With the above in hand, I now use the `simpleNetwork()` function to make an interactive network plot.
+
+```{r,fig.width=6,fig.height=6,fig.cap='Figure 1: Correlation Network of Correlates of Good Governance'}
+
+# first, set the color of the edges (or links)
+# between nodes (variables):
+strong_cors$col='red' # for negative correlations
+strong_cors$col[strong_cors$r>0]='lightblue' # for positive
+
+# make the network plot
+strong_cors %>%
+  simpleNetwork(charge = -25, # add negative charge to force points apart
+                fontSize = 6,
+                linkColour = .$col,
+                zoom=T,
+                opacity = .75,
+                nodeColour = 'grey',
+                fontFamily = 'calibri') 
+```
+
+There are few cool things about the above network plot.
+
+1. When you hover your mouse over nodes (or variables), the relevant node, as well as the other nodes connected with it, will be highlighted. This lets you easily see how one variable is connected with others. For example, if you hover your mouse over Income (GDP per capita), you will see Sustainable Development, Per Capita Education Spending, Government Effectiveness, Per Capita Health Spending, and World Happiness highlighted as well.
+
+2. If the positions of certain nodes obscure your view, you can also click on a given node in the network and pull it to a different position. Try it!
+
+3. You can zoom in and out if you want to take a closer look at a set of variables, or if you want a wider perspective on the entire network. If you have a mouse with a fancy rolly-thingy (that's the technical name), you can spin that up or down with your mouse hovering over the plot to control the zoom. Or, if you have a fancy touch screen, you can just use your fingers.
+
+All in all, the above results offer a nuanced picture of drivers of good governance, and ultimately, of happy citizens. For instance, look at the World Happiness measure, which is based on a simple survey about quality of life. If you highlight World Happiness, you'll instantly see other parts of the network come to the fore: Property Rights, Rule of Law, Control of Corruption, Government Effectiveness, Sustainable Development, Regulatory Quality, Income (maybe money does buy happiness?), Per Capita Education Spending, Per Capita Health Spending, and Human Development (based on the Human Development Index, which measures healthy lives, standard of living, and knowledge).
+
+There seems to be a story here about how investment in education and healthcare, coupled with strong property rights and low levels of corruption, promote quality of life (or at least are necessary conditions for it).
