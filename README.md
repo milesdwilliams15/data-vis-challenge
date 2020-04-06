@@ -14,3 +14,11 @@ Luckily, you’ve been collecting analytics data on how your users fund projects
 For example, you can send a push notification to all iOS users in Chicago, IL that says “Deep dish lovers unite! Help fund the largest pizza in the world on BootLoader.”
 
 **My answer**: [Help Dennis fund his eco-friendly bike.](https://rpubs.com/milesdwilliams15/592213)
+
+## Challenge 2: Correlates of Good Governance
+
+What powers successful governments? How is that success measured? Dive into this detailed dataset of indicators and find the correlations, comparisons, and stories you can tease out. 
+
+The dataset can be found here: [dataviz-02.csv](https://github.com/milesdwilliams15/data-vis-challenge/blob/master/dataviz-02.csv)
+
+**My answer**: [What Drives Good Governance?](https://rpubs.com/milesdwilliams15/595354)
